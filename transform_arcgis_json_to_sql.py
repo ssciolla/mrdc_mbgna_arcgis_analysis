@@ -1,20 +1,17 @@
-## Script to transform ArcGIS JSON output into SQL statements for database
+## Script to transform ArcGIS JSON output into SQL statements for database comparison and analysis
 ## Migrating Research Data Collections Project
 ## Grant PI: Andrea Thomer
 ## Script Author: Sam Sciolla
 
 ## Notes:
-# - The order of tables in the output SQL files needs be examined and potentially fixed to ensure tables refererenced by foreign keys are created first. (I have plans to create an algorithm to fix this soon.)
 # - If the database you are working with has many-to-many relationships, the script may need to be re-evaluated to ensure proper results.
 # - One-to-one relationships are handled by making foriegn-key fields UNIQUE.
 
 import json
 import requests
 
-# Global variables
+## Global variables
 CACHE_FILE_NAME = 'mbgna_arcgis_cache.json'
-
-## Caching
 
 # Setting up caching dictionary.
 try:
@@ -24,6 +21,10 @@ try:
     file_open.close()
 except:
     CACHE_DICTION = {}
+
+## Functions
+
+# Caching functions
 
 def make_unique_request_string(base_url, parameters_diction, private_keys=['api-key']):
     sorted_parameters = sorted(parameters_diction.keys())
@@ -48,31 +49,7 @@ def fetch_API_data(base_url, parameters_diction):
         cache_file_open.close()
         return data
 
-## Data manipulation
-
-def extract_info_from_table(entity_dict):
-    table = {}
-    table['name'] = entity_dict['name']
-    table['type'] = entity_dict['type']
-    fields = []
-    for field_dict in entity_dict['fields']:
-        field = {}
-        field['name'] = field_dict['name']
-        field['type'] = field_dict['type']
-        if 'length' in field_dict.keys():
-            field['length'] = field_dict['length']
-        field['nullable'] = field_dict['nullable']
-        field['domain'] = field_dict['domain']
-        if field['domain'] != None:
-            print("*** Domain found! ***")
-            print(table['name'])
-            print(field['name'])
-        fields.append(field)
-    table['fields'] = fields
-    table['relationships'] = entity_dict['relationships']
-    table['indexes'] = entity_dict['indexes']
-
-    return table
+# Relationship analysis functions
 
 def parse_relationships(tables):
     relationship_matches = {}
@@ -98,8 +75,57 @@ def parse_relationships(tables):
                 print("** Something's not working!! **")
     return relationship_matches
 
-def write_create_table_statement(table_dict, relationship_matches):
+def determine_table_order(relationship_matches_dict, table_name_strings):
+    table_order_dict = {}
+    for table_name in table_name_strings:
+        table_order_dict[table_name] = {}
+        table_order_dict[table_name]['Referenced Tables'] = []
+    for key in relationship_matches_dict.keys():
+        relationship_match = relationship_matches_dict[key]
+        dest_table_name = relationship_match['Destination Table Name']
+        origin_table_name = relationship_match['Origin Table Name']
+        table_order_dict[dest_table_name]['Referenced Tables'].append(origin_table_name)
 
+    # Ordering tables
+    next_index = 0
+    tables_ordered = []
+    tables_still_to_order = True
+    term_tables_still_to_order = True
+
+    while tables_still_to_order:
+        staging_area = []
+        if term_tables_still_to_order:
+            term_tables = []
+            for table_name in table_order_dict.keys():
+                referenced_tables = table_order_dict[table_name]['Referenced Tables']
+                if len(referenced_tables) == 0:
+                    term_tables.append(table_name)
+            staging_area += term_tables
+            term_tables_still_to_order = False
+        else:
+            for table_name in table_order_dict.keys():
+                if table_name not in tables_ordered:
+                    referenced_tables = table_order_dict[table_name]['Referenced Tables']
+                    ref_table_num = 1
+                    for referenced_table in referenced_tables:
+                        if referenced_table in tables_ordered:
+                            if ref_table_num == len(referenced_tables):
+                                staging_area.append(table_name)
+                            ref_table_num += 1
+                        else:
+                            break
+
+        # Assigning order indexes to tables in staging area
+        staging_area = sorted(staging_area)
+        for table_name in staging_area:
+            table_order_dict[table_name]['Order Index'] = next_index
+            next_index += 1
+            tables_ordered.append(table_name)
+        if len(tables_ordered) == len(table_order_dict.keys()):
+            tables_still_to_order = False
+    return table_order_dict
+
+def write_create_table_statement(table_dict, relationship_matches):
     # Name table
     table_name = table_dict['name'].replace(' ', '_')
     if 'Layer' in table_dict['type']:
@@ -109,7 +135,6 @@ def write_create_table_statement(table_dict, relationship_matches):
     local_origin_keys = []
     unique_destination_keys = []
     foreign_key_lines = []
-    # print(table_dict['relationships'])
     for relationship in table_dict['relationships']:
         relat_id = relationship['id']
         relationship_match = relationship_matches[relat_id]
@@ -214,7 +239,7 @@ layers = data['layers']
 tables = data['tables']
 all_tables = layers + tables
 
-# Identifying tables connected through relationships
+# Identifying pairs of tables connected through relationships
 
 relationship_matches = parse_relationships(all_tables)
 
@@ -222,32 +247,43 @@ relationship_matches_file = open('relationship_matches.json', 'w', encoding='utf
 relationship_matches_file.write(json.dumps(relationship_matches, indent=4))
 relationship_matches_file.close()
 
-# Creating SQL scripts
+# Producing SQL script statments
 
-table_sql_statements = []
+table_sql_statements = {}
 table_names = []
 for table in tables:
-    print('// {} //'.format(table['name']))
-    table_names.append(table['name'].replace(' ', '_'))
+    table_name = table['name'].replace(' ', '_')
+    print('// {} //'.format(table_name))
+    table_names.append(table_name)
     table_statement = write_create_table_statement(table, relationship_matches)
-    table_sql_statements.append(table_statement)
-table_sql_statements = sorted(table_sql_statements, key=lambda x: x.count('FOREIGN KEY'))
+    table_sql_statements[table_name] = table_statement
 
+layer_sql_statements = {}
+layer_names = []
+for layer in layers:
+    layer_name = layer['name'].replace(' ', '_') + '_Layer'
+    print('// {} //'.format(layer_name))
+    layer_names.append(layer_name)
+    layer_statement = write_create_table_statement(layer, relationship_matches)
+    layer_sql_statements[layer_name] = layer_statement
+
+# Writing SQL scripts
+
+all_table_names = table_names + layer_names
+ordering_result = determine_table_order(relationship_matches, all_table_names)
+
+tables_order = sorted(table_sql_statements.keys(), key=lambda x: ordering_result[x]['Order Index'])
+tables_sql_text = create_preamble(table_names)
+for table_name in tables_order:
+    tables_sql_text += '\n' + table_sql_statements[table_name]
 tables_sql_file = open('mbgna_arcgis_one.sql', 'w')
-tables_sql_text = create_preamble(table_names) + '\n'.join(table_sql_statements)
 tables_sql_file.write(tables_sql_text)
 tables_sql_file.close()
 
-layer_sql_statements = []
-layer_names = []
-for layer in layers:
-    print('// {} //'.format(layer['name']))
-    layer_names.append(layer['name'].replace(' ', '_') + '_Layer')
-    layer_statement = write_create_table_statement(layer, relationship_matches)
-    layer_sql_statements.append(layer_statement)
-layer_sql_statements = sorted(layer_sql_statements, key=lambda x: x.count('FOREIGN KEY'))
-
+layers_order = sorted(layer_sql_statements.keys(), key=lambda x: ordering_result[x]['Order Index'])
+layers_sql_text = create_preamble(layer_names)
+for layer_name in layers_order:
+    layers_sql_text += '\n' + layer_sql_statements[layer_name]
 layers_sql_file = open('mbgna_arcgis_two.sql', 'w')
-layers_sql_text = create_preamble(layer_names) + '\n'.join(layer_sql_statements)
 layers_sql_file.write(layers_sql_text)
 layers_sql_file.close()
