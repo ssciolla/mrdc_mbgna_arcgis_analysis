@@ -27,6 +27,7 @@ except:
 
 # Caching functions
 
+# Create unique request string to identify request in cache
 def make_unique_request_string(base_url, parameters_diction, private_keys=['api-key']):
     sorted_parameters = sorted(parameters_diction.keys())
     fields = []
@@ -35,6 +36,7 @@ def make_unique_request_string(base_url, parameters_diction, private_keys=['api-
             fields.append("{}-{}".format(parameter, parameters_diction[parameter]))
     return base_url + "&".join(fields)
 
+# Pull data from API or from cache file
 def fetch_API_data(base_url, parameters_diction):
     unique_request_url = make_unique_request_string(base_url, parameters_diction)
     if unique_request_url in CACHE_DICTION:

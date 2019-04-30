@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This repository contains a Python script designed to convert the table and relationship JSON data about an ArcGIS database (fetched using a REST API) into a MySQL script with CREATE statements for the tables and layers. By using software such as [MySQL Workbench](https://www.mysql.com/products/workbench/), this script can be used to simply create an enhanced entity-relationship diagram.
+This repository contains a Python script designed to convert the table and relationship JSON data about an ArcGIS database (fetched using a REST API) into a MySQL script with CREATE statements for the tables and layers. The JSON data contains extended information about tables, fields, and relationships. Using these details, the script produces a series of CREATE TABLE statements, ordered so that the tables with no foreign keys would be created first, followed by the tables with foreign keys to those, and so on. By using software such as [MySQL Workbench](https://www.mysql.com/products/workbench/), this script can be used to quickly create an enhanced entity-relationship diagram.
 
 ## Use
 
