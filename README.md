@@ -19,11 +19,11 @@ This script has no file inputs. By default, the script will collect data from th
 
 ## Output
 
-This script will produce three files: `arcgis_response.json`, `relationship_matches.json`, and `database_tables.sql`. `arcgis_response.json` contains the JSON response received from the ArcGIS REST API (keep in mind responses are cached; delete the cache file to collect new data). `relationship_matches.json` stores reconfigured data about table relationships, resulting in records for each relationship that includes the names of both tables and cardinalities. `database_tables.sql` lays out the tables described in JSON as CREATE TABLE statments, ordered so that tables with foreign keys follow the tables they reference.
+This script will produce three files: `arcgis_response.json`, `relationship_matches.json`, and `database_tables.sql`. `arcgis_response.json` contains the JSON response received from the ArcGIS REST API (keep in mind responses are cached; delete the cache file to collect new data). `relationship_matches.json` stores reconfigured data about table relationships, resulting in a record for each relationship that includes the names of both tables and cardinalities. `database_tables.sql` lays out the tables described in JSON as CREATE TABLE statements, ordered so that tables with foreign keys follow the tables they reference.
 
 ## Dependencies
 
-This script uses the `[requests](https://2.python-requests.org/en/master/)` library to interact with the ArcGIS REST API. It also uses the `json` module, a standard library.
+This script uses the [requests](https://2.python-requests.org/en/master/) library to interact with the ArcGIS REST API. It also uses the `json` module, a standard library.
 
 ## Rights
 
